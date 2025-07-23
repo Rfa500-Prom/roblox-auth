@@ -1,33 +1,24 @@
+// index.js (para Render)
+
 const express = require("express");
 const cors = require("cors");
 const app = express();
+
 app.use(cors());
 app.use(express.json());
 
-const PORT = 3000;
+const codes = {};
 
-let codes = {}; // almacén de códigos
-
-function generateCode(length = 6) {
-  const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
-  let code = "";
-  for (let i = 0; i < length; i++) {
-    code += chars.charAt(Math.floor(Math.random() * chars.length));
-  }
-  return code;
+// Utilidad para generar códigos de 6 dígitos
+function generateCode() {
+  return Math.floor(100000 + Math.random() * 900000).toString();
 }
 
-app.get("/", (req, res) => {
-  res.send("Visita /generate para obtener un código único.");
-});
-
-// ✅ Generar código HTML estilizado
+// Ruta para generar código y mostrarlo como HTML estilizado
 app.get("/generate", (req, res) => {
   const code = generateCode();
-  codes[code] = {
-    used: false,
-    createdAt: Date.now()
-  };
+  const expiresAt = Date.now() + 12 * 60 * 60 * 1000; // 12 horas
+  codes[code] = { used: false, expiresAt };
 
   const html = `
   <!DOCTYPE html>
@@ -68,12 +59,6 @@ app.get("/generate", (req, res) => {
         display: inline-block;
         font-weight: bold;
         letter-spacing: 4px;
-        margin-bottom: 20px;
-      }
-      .note {
-        color: #94a3b8;
-        font-size: 14px;
-        margin-top: 10px;
       }
     </style>
   </head>
@@ -81,7 +66,6 @@ app.get("/generate", (req, res) => {
     <div class="container">
       <div class="title">🔐 Tu código de un solo uso es:</div>
       <div class="code-box">${code}</div>
-      <div class="note">Este código es válido por 12 horas</div>
     </div>
   </body>
   </html>
@@ -91,30 +75,29 @@ app.get("/generate", (req, res) => {
   res.send(html);
 });
 
-// ✅ Verificar código desde Roblox
+// Ruta de verificación
 app.post("/verify", (req, res) => {
-  const code = req.body.code?.toUpperCase();
-  const now = Date.now();
+  const { code } = req.body;
+  const entry = codes[code];
 
-  if (codes[code]) {
-    const { used, createdAt } = codes[code];
-    const age = now - createdAt;
-
-    if (used) {
-      return res.json({ success: false, reason: "used" });
-    }
-
-    if (age > 12 * 60 * 60 * 1000) { // 12 horas
-      return res.json({ success: false, reason: "expired" });
-    }
-
-    codes[code].used = true;
-    return res.json({ success: true });
+  if (!entry) {
+    return res.json({ success: false, reason: "invalid" });
   }
 
-  res.json({ success: false, reason: "invalid" });
+  if (entry.used) {
+    return res.json({ success: false, reason: "used" });
+  }
+
+  if (Date.now() > entry.expiresAt) {
+    return res.json({ success: false, reason: "expired" });
+  }
+
+  entry.used = true;
+  return res.json({ success: true });
 });
 
+// Puerto de escucha
+const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log(`Servidor iniciado en http://localhost:${PORT}`);
 });
