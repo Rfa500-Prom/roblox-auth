@@ -2,100 +2,32 @@ const express = require("express");
 const cors = require("cors");
 
 const app = express();
-const PORT = process.env.PORT || 3000;
+const port = process.env.PORT || 3000;
 
 app.use(cors());
 app.use(express.json());
 
 const codes = {};
 
+// Función para generar un código aleatorio de 6 caracteres
 function generateCode() {
-  const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+  const characters = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
   let code = "";
-  for (let i = 0; i < 8; i++) {
-    code += chars.charAt(Math.floor(Math.random() * chars.length));
+  for (let i = 0; i < 6; i++) {
+    code += characters.charAt(Math.floor(Math.random() * characters.length));
   }
   return code;
 }
 
-function isExpired(timestamp) {
-  const now = Date.now();
-  const twelveHours = 12 * 60 * 60 * 1000;
-  return now - timestamp > twelveHours;
-}
-
-// Ruta para generar código
+// Ruta para generar un nuevo código
 app.get("/generate", (req, res) => {
   const code = generateCode();
   const timestamp = Date.now();
-
-  codes[code] = {
-    used: false,
-    createdAt: timestamp
-  };
-
-  const html = `
-  <!DOCTYPE html>
-  <html>
-  <head>
-    <title>Código de acceso</title>
-    <style>
-      body {
-        background-color: #0f172a;
-        color: white;
-        font-family: Arial, sans-serif;
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        justify-content: center;
-        height: 100vh;
-        margin: 0;
-      }
-      .container {
-        background-color: #1e293b;
-        padding: 30px;
-        border-radius: 12px;
-        box-shadow: 0 4px 12px rgba(0,0,0,0.4);
-        text-align: center;
-      }
-      .title {
-        font-size: 24px;
-        margin-bottom: 20px;
-        color: #93c5fd;
-      }
-      .code-box {
-        font-size: 36px;
-        padding: 15px 30px;
-        background-color: white;
-        color: #0f172a;
-        border-radius: 10px;
-        border: 2px solid #3b82f6;
-        display: inline-block;
-        font-weight: bold;
-        letter-spacing: 4px;
-      }
-      .note {
-        margin-top: 15px;
-        font-size: 14px;
-        color: #cbd5e1;
-      }
-    </style>
-  </head>
-  <body>
-    <div class="container">
-      <div class="title">🔐 Tu código de un solo uso es:</div>
-      <div class="code-box">${code}</div>
-      <div class="note">Este código es válido por 12 horas.</div>
-    </div>
-  </body>
-  </html>
-  `;
-
-  res.setHeader("Content-Type", "text/html");
-  res.send(html);
+  codes[code] = { used: false, timestamp };
+  res.json({ code });
 });
 
-// Ruta para verificar código
+// Ruta para verificar el código
 app.post("/verify", (req, res) => {
   const { code } = req.body;
 
@@ -103,18 +35,34 @@ app.post("/verify", (req, res) => {
     return res.json({ success: false, reason: "invalid" });
   }
 
-  if (codes[code].used) {
-    return res.json({ success: false, reason: "used" });
-  }
+  const codeData = codes[code];
+  const now = Date.now();
 
-  if (isExpired(codes[code].createdAt)) {
+  // Verificar expiración (12 horas)
+  const twelveHours = 12 * 60 * 60 * 1000;
+  if (now - codeData.timestamp > twelveHours) {
+    delete codes[code];
     return res.json({ success: false, reason: "expired" });
   }
 
-  codes[code].used = true;
-  return res.json({ success: true });
+  if (codeData.used) {
+    return res.json({ success: false, reason: "used" });
+  }
+
+  codeData.used = true;
+  res.json({ success: true });
 });
 
-app.listen(PORT, () => {
-  console.log(`Servidor iniciado en http://localhost:${PORT}`);
+// Ruta raíz
+app.get("/", (req, res) => {
+  res.send("Servidor activo");
+});
+
+// Ruta para mantener activo con UptimeRobot
+app.get("/ping", (req, res) => {
+  res.status(200).send("pong");
+});
+
+app.listen(port, () => {
+  console.log(`Servidor iniciado en http://localhost:${port}`);
 });
