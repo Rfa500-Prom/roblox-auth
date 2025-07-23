@@ -1,24 +1,38 @@
-// index.js (para Render)
-
 const express = require("express");
 const cors = require("cors");
+
 const app = express();
+const PORT = process.env.PORT || 3000;
 
 app.use(cors());
 app.use(express.json());
 
 const codes = {};
 
-// Utilidad para generar códigos de 6 dígitos
 function generateCode() {
-  return Math.floor(100000 + Math.random() * 900000).toString();
+  const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+  let code = "";
+  for (let i = 0; i < 8; i++) {
+    code += chars.charAt(Math.floor(Math.random() * chars.length));
+  }
+  return code;
 }
 
-// Ruta para generar código y mostrarlo como HTML estilizado
+function isExpired(timestamp) {
+  const now = Date.now();
+  const twelveHours = 12 * 60 * 60 * 1000;
+  return now - timestamp > twelveHours;
+}
+
+// Ruta para generar código
 app.get("/generate", (req, res) => {
   const code = generateCode();
-  const expiresAt = Date.now() + 12 * 60 * 60 * 1000; // 12 horas
-  codes[code] = { used: false, expiresAt };
+  const timestamp = Date.now();
+
+  codes[code] = {
+    used: false,
+    createdAt: timestamp
+  };
 
   const html = `
   <!DOCTYPE html>
@@ -60,12 +74,18 @@ app.get("/generate", (req, res) => {
         font-weight: bold;
         letter-spacing: 4px;
       }
+      .note {
+        margin-top: 15px;
+        font-size: 14px;
+        color: #cbd5e1;
+      }
     </style>
   </head>
   <body>
     <div class="container">
       <div class="title">🔐 Tu código de un solo uso es:</div>
       <div class="code-box">${code}</div>
+      <div class="note">Este código es válido por 12 horas.</div>
     </div>
   </body>
   </html>
@@ -75,29 +95,26 @@ app.get("/generate", (req, res) => {
   res.send(html);
 });
 
-// Ruta de verificación
+// Ruta para verificar código
 app.post("/verify", (req, res) => {
   const { code } = req.body;
-  const entry = codes[code];
 
-  if (!entry) {
+  if (!code || !codes[code]) {
     return res.json({ success: false, reason: "invalid" });
   }
 
-  if (entry.used) {
+  if (codes[code].used) {
     return res.json({ success: false, reason: "used" });
   }
 
-  if (Date.now() > entry.expiresAt) {
+  if (isExpired(codes[code].createdAt)) {
     return res.json({ success: false, reason: "expired" });
   }
 
-  entry.used = true;
+  codes[code].used = true;
   return res.json({ success: true });
 });
 
-// Puerto de escucha
-const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log(`Servidor iniciado en http://localhost:${PORT}`);
 });
